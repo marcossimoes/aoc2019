@@ -12,8 +12,6 @@
        (map vec)
        vec))
 
-(input->int-vecs "156218-652527")
-
 (defn last-index? [vect index] (= (count vect) (inc index)))
 (defn last-index [vect] (dec (count vect)))
 (defn second-to-last-index [vect] (- (count vect)
@@ -31,7 +29,7 @@
         updated-nxt-index (assoc vect (inc index) v)]
     (if (last-index? vect nxt-index)
       updated-nxt-index
-      (recur updated-nxt-index nxt-index v))))
+      (recur updated-nxt-index nxt-index v))))              ;otherwise check nxt digit
 
 (defn nxt-non-decreasing
   ([vect] (nxt-non-decreasing vect 0))
@@ -49,41 +47,25 @@
           false
           (partition 2 1 vect)))
 
-(reduce #(or %1 (apply = %2)) false (partition 2 1 [1 2 3 4 5 6]))
+(defn inc-by
+  ([vect amount] (inc-by vect amount (last-index vect)))
+  ([vect amount index]
+   (if (zero? amount)
+     vect
+     (let [updated-val (+ amount (vect index))
+           [val-for-index val-for-nxt-index] ((juxt rem quot) updated-val 10)]
+       (inc-by (assoc vect index val-for-index) val-for-nxt-index (dec index))))))
 
-(and (false? (has-double? [1 2 3 4 5 6]))
-     (true? (has-double? [1 2 3 4 6 6]))
-     (true? (has-double? [1 2 3 5 5 6]))
-     (true? (has-double? [1 2 4 4 5 6])))
+(defn inc-by-1 [vect] (inc-by vect 1))
 
 (defn nxt-with-double
   "Assumes vec is non decreasing"
   [vect]
-  (if (has-double? vect)
-    vect
-    (assoc vect (second-to-last-index vect) (last vect))))
+  (cond
+    (has-double? vect) vect
+    :else (assoc vect (second-to-last-index vect) (last vect))))
 
-(and (= [3 3 3 3 3 3] (nxt-non-decreasing [3 2 3 4 5 6]))
-     (= [1 4 4 4 4 4] (nxt-non-decreasing [1 4 3 4 5 6]))
-     (= [1 2 5 5 5 5] (nxt-non-decreasing [1 2 5 4 5 6]))
-     (= [1 2 3 4 5 7] (nxt-non-decreasing [1 2 3 4 5 6])))
-
-(= [1 2 3 4 6 6] (nxt-with-double [1 2 3 4 5 6]))
-(= [1 2 3 4 6 6] (nxt-with-double [1 2 3 4 6 6]))
-
-(defn inc-by-1
-  ([vect] (inc-by-1 vect (last-index vect)))
-  ([vect
-    index]
-   (if (> 9 (vect index))
-     (update vect index inc)
-     (inc-by-1 (assoc vect index 0)
-               (dec index)))))
-
-(nth (iterate inc-by-1 [0 0 0 0 0 0]) 1000)
-
-(defn nxt
-  [vect]
+(defn nxt [vect]
   (-> vect
       inc-by-1
       nxt-non-decreasing
@@ -97,7 +79,7 @@
      (> index (last-index vect1))                           ; all index checked, vect1 still less or equal to vect2
      (< (vect1 index) (vect2 index))                        ; if most left digit is smaller, vect1 is less than vect2
      (and (not (> (vect1 index) (vect2 index)))             ; if most left digit is greater, vect1 is more than vect2
-          (less-or-equal-to? vect1 vect2 (inc index))))))   ; if equal check nxt digits
+          (less-or-equal-to? vect1 vect2 (inc index))))))
 
 (defn combinations
   [[start end]]
@@ -106,9 +88,6 @@
        (take-while #(less-or-equal-to? % end))
        count))
 
-(combinations [[1 1 1 1 1 0] [1 1 1 1 1 1]])
-(combinations [[1 5 6 2 1 8] [6 5 2 5 2 7]])
-
 (defn run-app
   [input-str]
   (-> input-str
@@ -116,3 +95,61 @@
       combinations))
 
 (run-app "156218-652527")
+
+;; ### Part II
+
+(defn decreasing?
+  ([vect] (decreasing? vect 0))
+  ([vect index]
+   (and (not (last-index? vect index))                      ;if all indexes were checked, return false
+        (or (> (vect index) (vect (inc index)))             ;if current digit is larger than nxt, return true
+            (decreasing? vect (inc index))))))
+
+(defn has-exactly-double?
+  "Assumes vec is non decreasing"
+  [vect]
+  (->> vect
+       (partition-by identity)
+       (some #(= 2 (count %)))))              ; if equal check nxt digits
+
+(defn trio-of-9s->001 [vect] (inc-by vect 2))
+(defn xyz->xzz [vect] (assoc vect (second-to-last-index vect) (last vect)))
+(defn xxx->xxy "assumes x < 9" [vect] (inc-by vect 1))
+(defn xxxx->yyzz [vect] (inc-by vect 11))
+
+(defn nxt-with-exactly-double
+  "Assumes vec is non decreasing"
+  [vect]
+  (let [last-repetition (->> vect (partition-by identity) last)]
+    (cond
+      (= '(9 9 9) last-repetition) (trio-of-9s->001 vect)
+      (= 3 (count last-repetition)) (xxx->xxy vect)
+      (< 3 (count last-repetition)) (xxxx->yyzz vect)
+      :else (xyz->xzz vect))))
+
+(defn nxt-valid-with-exact-doubles
+  [vect]
+  (cond
+    (decreasing? vect) (nxt-valid-with-exact-doubles (nxt-non-decreasing vect))
+    (not (has-exactly-double? vect)) (nxt-valid-with-exact-doubles (nxt-with-exactly-double vect))
+    :else vect))
+
+(defn nxt-with-exact-doubles [vect]
+  (-> vect
+      inc-by-1
+      nxt-valid-with-exact-doubles))
+
+(defn combinations-with-exact-doubles
+  [[start end]]
+  (->> (nxt-with-exact-doubles start)
+       (iterate nxt-with-exactly-double)
+       (take-while #(less-or-equal-to? % end))
+       count))
+
+(defn run-app-with-exact-doubles
+  [input-str]
+  (-> input-str
+      input->int-vecs
+      combinations-with-exact-doubles))
+
+(run-app-with-exact-doubles "156218-652527")
